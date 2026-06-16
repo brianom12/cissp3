@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CISSP Exam Simulator</title>
+    <style>
+        :root {
+            --primary: #1a237e;
+            --primary-light: #534bae;
+            --primary-dark: #000051;
+            --accent: #00bfa5;
+            --accent-light: #5df2d6;
+            --accent-dark: #008e76;
+            --correct: #2e7d32;
+            --incorrect: #c62828;
+            --warning: #f57f17;
+            --bg: #f5f5f5;
+            --card-bg: #ffffff;
+            --text: #212121;
+            --text-light: #757575;
+            --shadow: 0 4px 6px rgba(0,0,0,0.1);
+            --shadow-lg: 0 10px 25px rgba(0,0,0,0.15);
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; background:var(--bg); color:var(--text); line-height:1.6; }
+
+        /* Loading Overlay */
+        #loadingOverlay {
+            position:fixed; top:0; left:0; width:100%; height:100%;
+            background:rgba(26,35,126,0.95); display:flex; flex-direction:column;
+            align-items:center; justify-content:center; z-index:9999; color:white;
+        }
+        .spinner {
+            width:60px; height:60px; border:5px solid rgba(255,255,255,0.3);
+            border-top:5px solid var(--accent); border-radius:50%;
+            animation:spin 1s linear infinite; margin-bottom:20px;
+        }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* File Picker Fallback */
+        .file-picker-area {
+            text-align:center; margin-top:20px; padding:30px;
+            border:2px dashed rgba(255,255,255,0.4); border-radius:16px; max-width:500px;
+        }
+        .file-picker-area p { margin-bottom:15px; opacity:0.85; }
+        .file-picker-btn {
+            display:inline-block; padding:14px 32px; background:var(--accent); color:white;
+            border:none; border-radius:10px; font-size:1.1em; font-weight:600;
+            cursor:pointer; transition:all 0.3s;
+        }
+        .file-picker-btn:hover { background:var(--accent-dark); transform:translateY(-2px); box-shadow:0 4px 15px rgba(0,191,165,0.4); }
+        #jsonFileInput { display:none; }
+
+        /* Header */
+        .header {
+            background:linear-gradient(135deg,var(--primary),var(--primary-light));
+            color:white; padding:20px; text-align:center; box-shadow:var(--shadow);
+        }
+        .header h1 { font-size:1.8em; margin-bottom:5px; }
+        .header p { opacity:0.9; font-size:0.95em; }
+
+        /* Container */
+        .container { max-width:900px; margin:0 auto; padding:20px; }
+
+        /* Cards */
+        .card {
+            background:var(--card-bg); border-radius:12px; padding:30px;
+            box-shadow:var(--shadow); margin-bottom:20px;
+        }
+
+        /* Landing Page */
+        #landingPage .welcome-icon { font-size:4em; margin-bottom:15px; }
+        #landingPage h2 { color:var(--primary); margin-bottom:10px; }
+        .exam-info { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:15px; margin:20px 0; }
+        .info-item {
+            background:linear-gradient(135deg,#e8eaf6,#c5cae9); padding:15px;
+            border-radius:8px; text-align:center;
+        }
+        .info-item .label { font-size:0.85em; color:var(--text-light); }
+        .info-item .value { font-size:1.4em; font-weight:bold; color:var(--primary); }
+
+        /* Controls */
+        .controls { margin:20px 0; }
+        .control-group { margin-bottom:15px; }
+        .control-group label { display:block; margin-bottom:5px; font-weight:600; }
+        .control-group input[type="number"],
+        .control-group select {
+            width:100%; padding:10px; border:2px solid #e0e0e0; border-radius:8px;
+            font-size:1em; transition:border-color 0.3s;
+        }
+        .control-group input[type="number"]:focus,
+        .control-group select:focus { border-color:var(--primary); outline:none; }
+
+        .preset-buttons { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+        .preset-btn {
+            padding:8px 16px; border:2px solid var(--primary); background:white;
+            color:var(--primary); border-radius:20px; cursor:pointer; font-size:0.85em;
+            transition:all 0.3s;
+        }
+        .preset-btn:hover, .preset-btn.active { background:var(--primary); color:white; }
+
+        .toggle-group { display:flex; align-items:center; gap:10px; margin:8px 0; }
+        .toggle {
+            position:relative; width:50px; height:26px; background:#ccc;
+            border-radius:13px; cursor:pointer; transition:background 0.3s;
+        }
+        .toggle.active { background:var(--accent); }
+        .toggle::after {
+            content:''; position:absolute; width:22px; height:22px;
+            background:white; border-radius:50%; top:2px; left:2px;
+            transition:transform 0.3s;
+        }
+        .toggle.active::after { transform:translateX(24px); }
+
+        /* Buttons */
+        .btn {
+            padding:12px 30px; border:none; border-radius:8px; font-size:1em;
+            cursor:pointer; transition:all 0.3s; font-weight:600;
+        }
+        .btn-primary { background:var(--primary); color:white; }
+        .btn-primary:hover { background:var(--primary-light); transform:translateY(-2px); box-shadow:var(--shadow); }
+        .btn-accent { background:var(--accent); color:white; }
+        .btn-accent:hover { background:var(--accent-dark); }
+        .btn-danger { background:var(--incorrect); color:white; }
+        .btn-danger:hover { background:#b71c1c; }
+        .btn-warning { background:var(--warning); color:white; }
+        .btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+
+        /* Exam Page */
+        .exam-header {
+            display:flex; justify-content:space-between; align-items:center;
+            flex-wrap:wrap; gap:10px; margin-bottom:20px;
+        }
+        .timer {
+            font-size:1.2em; font-weight:bold; padding:8px 16px;
+            background:var(--primary); color:white; border-radius:8px;
+        }
+        .timer.warning { background:var(--warning); animation:pulse 1s infinite; }
+        @keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.7; } }
+        .progress-bar {
+            width:100%; height:8px; background:#e0e0e0; border-radius:4px;
+            margin-bottom:20px; overflow:hidden;
+        }
+        .progress-fill {
+            height:100%; background:linear-gradient(90deg,var(--accent),var(--accent-light));
+            border-radius:4px; transition:width 0.5s ease;
+        }
+
+        /* Question */
+        .question-header { display:flex; justify-content:space-between; align-items:start; margin-bottom:15px; }
+        .question-number { font-size:0.9em; color:var(--text-light); margin-bottom:5px; }
+        .question-id { font-size:0.75em; color:#999; }
+        .question-text { font-size:1.1em; font-weight:600; margin-bottom:20px; line-height:1.5; }
+        .flag-btn {
+            background:none; border:2px solid var(--warning); color:var(--warning);
+            padding:5px 12px; border-radius:20px; cursor:pointer; font-size:0.85em;
+            transition:all 0.3s; white-space:nowrap;
+        }
+        .flag-btn.flagged { background:var(--warning); color:white; }
+
+        /* Choices */
+        .choices { display:flex; flex-direction:column; gap:10px; }
+        .choice {
+            display:flex; align-items:center; padding:15px; border:2px solid #e0e0e0;
+            border-radius:8px; cursor:pointer; transition:all 0.3s;
+        }
+        .choice:hover { border-color:var(--primary-light); background:#f8f9ff; }
+        .choice.selected { border-color:var(--primary); background:#e8eaf6; }
+        .choice.correct { border-color:var(--correct); background:#e8f5e9; }
+        .choice.incorrect { border-color:var(--incorrect); background:#ffebee; }
+        .choice-letter {
+            width:36px; height:36px; border-radius:50%; background:var(--primary);
+            color:white; display:flex; align-items:center; justify-content:center;
+            font-weight:bold; margin-right:12px; flex-shrink:0;
+        }
+        .choice.correct .choice-letter { background:var(--correct); }
+        .choice.incorrect .choice-letter { background:var(--incorrect); }
+
+        /* Explanation */
+        .explanation {
+            margin-top:15px; padding:15px; border-radius:8px;
+            border-left:4px solid var(--accent); background:#e0f2f1;
+            display:none;
+        }
+        .explanation.show { display:block; }
+        .explanation h4 { color:var(--accent-dark); margin-bottom:5px; }
+
+        /* Navigation */
+        .nav-buttons { display:flex; justify-content:space-between; margin-top:20px; flex-wrap:wrap; gap:10px; }
+        .question-nav { display:flex; flex-wrap:wrap; gap:5px; margin-top:15px; }
+        .q-nav-btn {
+            width:40px; height:40px; border:2px solid #e0e0e0; border-radius:8px;
+            background:white; cursor:pointer; font-size:0.85em; transition:all 0.3s;
+            display:flex; align-items:center; justify-content:center;
+        }
+        .q-nav-btn.current { border-color:var(--primary); background:var(--primary); color:white; }
+        .q-nav-btn.answered { border-color:var(--accent); background:var(--accent); color:white; }
+        .q-nav-btn.flagged { border-color:var(--warning); background:var(--warning); color:white; }
+        .q-nav-btn.flagged.answered {
+            background:linear-gradient(135deg,var(--accent) 50%,var(--warning) 50%); color:white;
+            border-color:var(--warning);
+        }
+
+        /* Results */
+        .results-summary { text-align:center; padding:30px 0; }
+        .score-circle {
+            width:180px; height:180px; border-radius:50%; margin:0 auto 20px;
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            font-size:2.5em; font-weight:bold; color:white;
+        }
+        .score-circle.pass { background:linear-gradient(135deg,var(--correct),#4caf50); }
+        .score-circle.fail { background:linear-gradient(135deg,var(--incorrect),#ef5350); }
+        .score-circle .percentage { font-size:0.4em; opacity:0.9; }
+        .stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:15px; margin:20px 0; }
+        .stat-item { text-align:center; padding:15px; background:#f5f5f5; border-radius:8px; }
+        .stat-item .stat-value { font-size:1.5em; font-weight:bold; color:var(--primary); }
+        .stat-item .stat-label { font-size:0.85em; color:var(--text-light); }
+
+        /* Review */
+        .review-item {
+            margin-bottom:15px; padding:15px; border-radius:8px;
+            border-left:4px solid #e0e0e0;
+        }
+        .review-item.correct-review { border-left-color:var(--correct); background:#f1f8e9; }
+        .review-item.incorrect-review { border-left-color:var(--incorrect); background:#fce4ec; }
+        .review-question { font-weight:600; margin-bottom:8px; }
+        .review-answer { font-size:0.9em; }
+
+        /* Footer */
+        .footer { text-align:center; padding:20px; color:var(--text-light); font-size:0.85em; }
+
+        /* Responsive */
+        @media(max-width:600px) {
+            .header h1 { font-size:1.3em; }
+            .container { padding:10px; }
+            .card { padding:15px; }
+            .exam-header { flex-direction:column; }
+            .q-nav-btn { width:35px; height:35px; font-size:0.75em; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay">
+    <div id="loadingSpinner" class="spinner"></div>
+    <p id="loadingTitle" style="font-size:1.2em;">Loading CISSP Question Bank...</p>
+    <p id="loadingSubtext" style="font-size:0.9em; margin-top:8px; opacity:0.7;">Please wait</p>
+    <div id="filePickerFallback" style="display:none;">
+        <div class="file-picker-area">
+            <p style="font-size:1.1em;">&#128194; Your browser blocked automatic file loading.<br>
+            Please select the JSON file manually:</p>
+            <input type="file" id="jsonFileInput" accept=".json">
+            <button class="file-picker-btn" onclick="document.getElementById('jsonFileInput').click()">
+                &#128194; Select CISSP_Exam_Simulator_Data.json
+            </button>
+            <p style="font-size:0.8em; margin-top:15px; opacity:0.6;">
+                Tip: To avoid this, open both files via a local web server.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="header">
+    <h1>&#128737;&#65039; CISSP Exam Simulator</h1>
+    <p>Certified Information Systems Security Professional Practice Exam</p>
+</div>
+
+<div class="container">
+
+    <!-- Landing Page -->
+    <div id="landingPage" class="card" style="text-align:center;">
+        <div class="welcome-icon">&#128203;</div>
+        <h2>Welcome to the CISSP Practice Exam</h2>
+        <p id="landingSubtitle">Loading question bank...</p>
+
+        <div class="exam-info">
+            <div class="info-item">
+                <div class="label">Question Bank</div>
+                <div class="value" id="totalQLabel">&mdash;</div>
+            </div>
+            <div class="info-item">
+                <div class="label">Time per Question</div>
+                <div class="value">1.5 min</div>
+            </div>
+            <div class="info-item">
+                <div class="label">Passing Score</div>
+                <div class="value">70%</div>
+            </div>
+        </div>
+
+        <div class="controls" style="text-align:left;">
+            <div class="control-group">
+                <label>Number of Questions:</label>
+                <input type="number" id="numQuestions" min="1" max="782" value="50">
+                <div class="preset-buttons" id="presetButtons"></div>
+            </div>
+
+            <div class="control-group">
+                <label>Options:</label>
+                <div class="toggle-group">
+                    <div class="toggle active" id="shuffleToggle" onclick="this.classList.toggle('active')"></div>
+                    <span>Shuffle Questions</span>
+                </div>
+                <div class="toggle-group">
+                    <div class="toggle active" id="shuffleChoicesToggle" onclick="this.classList.toggle('active')"></div>
+                    <span>Shuffle Choices</span>
+                </div>
+                <div class="toggle-group">
+                    <div class="toggle" id="studyModeToggle" onclick="this.classList.toggle('active')"></div>
+                    <span>Study Mode (Show answers immediately)</span>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn btn-primary" id="startBtn" onclick="startExam()" disabled>
+            &#128640; Start Exam
+        </button>
+    </div>
+
+    <!-- Exam Page -->
+    <div id="examPage" style="display:none;">
+        <div class="card">
+            <div class="exam-header">
+                <div>
+                    <span id="questionCounter">Question 1 of 50</span>
+                    <span id="questionIdLabel" class="question-id"></span>
+                </div>
+                <div class="timer" id="timer">&#9201;&#65039; 00:00</div>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width:0%"></div>
+            </div>
+
+            <div id="questionArea">
+                <div class="question-header">
+                    <div class="question-text" id="questionText"></div>
+                    <button class="flag-btn" id="flagBtn" onclick="toggleFlag()">&#128681; Flag</button>
+                </div>
+                <div class="choices" id="choicesArea"></div>
+                <div class="explanation" id="explanationArea">
+                    <h4>&#128161; Explanation</h4>
+                    <p id="explanationText"></p>
+                </div>
+            </div>
+
+            <div class="nav-buttons">
+                <button class="btn btn-primary" onclick="prevQuestion()">&larr; Previous</button>
+                <button class="btn btn-accent" id="submitBtn" onclick="submitAnswer()" disabled>Submit Answer</button>
+                <button class="btn btn-primary" onclick="nextQuestion()">Next &rarr;</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <h3>Question Navigator</h3>
+                <button class="btn btn-danger" onclick="finishExam()">Finish Exam</button>
+            </div>
+            <div class="question-nav" id="questionNav"></div>
+            <div style="margin-top:10px; font-size:0.8em; color:var(--text-light);">
+                <span style="display:inline-block; width:12px; height:12px; background:var(--accent); border-radius:3px;"></span> Answered
+                <span style="display:inline-block; width:12px; height:12px; background:var(--warning); border-radius:3px; margin-left:10px;"></span> Flagged
+                <span style="display:inline-block; width:12px; height:12px; background:var(--primary); border-radius:3px; margin-left:10px;"></span> Current
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Page -->
+    <div id="resultsPage" style="display:none;">
+        <div class="card results-summary">
+            <h2>&#128202; Exam Results</h2>
+            <div class="score-circle" id="scoreCircle">
+                <span id="scoreValue">0</span>
+                <span class="percentage" id="scorePercent">0%</span>
+            </div>
+            <h3 id="resultMessage"></h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value" id="statCorrect">0</div>
+                    <div class="stat-label">Correct</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="statIncorrect">0</div>
+                    <div class="stat-label">Incorrect</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="statUnanswered">0</div>
+                    <div class="stat-label">Unanswered</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="statTime">00:00</div>
+                    <div class="stat-label">Time Taken</div>
+                </div>
+            </div>
+
+            <div style="margin-top:20px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+                <button class="btn btn-primary" onclick="showReview()">&#128221; Review Answers</button>
+                <button class="btn btn-accent" onclick="restartExam()">&#128260; New Exam</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Review Page -->
+    <div id="reviewPage" style="display:none;">
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <h2>&#128221; Answer Review</h2>
+                <div>
+                    <button class="btn btn-warning" onclick="filterReview('incorrect')" style="margin-right:5px;">Show Incorrect Only</button>
+                    <button class="btn btn-primary" onclick="filterReview('all')">Show All</button>
+                </div>
+            </div>
+            <div id="reviewArea" style="margin-top:20px;"></div>
+            <div style="text-align:center; margin-top:20px;">
+                <button class="btn btn-accent" onclick="restartExam()">&#128260; New Exam</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="footer">
+    <p>CISSP Exam Simulator &mdash; For study purposes only</p>
+</div>
+
+<script>
+// ===== GLOBAL STATE =====
+let BANK = [];
+let questions = [];
+let currentQuestion = 0;
+let userAnswers = {};
+let flaggedQuestions = new Set();
+let timerInterval;
+let elapsedSeconds = 0;
+let studyMode = false;
+let shuffleChoices = true;
+let choiceMaps = {};
+
+// ===== DATA INITIALIZATION =====
+function initializeData(data) {
+    BANK = data.questions || [];
+    var total = BANK.length;
+    document.getElementById('totalQLabel').textContent = total + ' Questions';
+    document.getElementById('numQuestions').max = total;
+    document.getElementById('landingSubtitle').textContent =
+        'Configure your practice exam from ' + total + ' questions across all 8 CISSP domains';
+
+    // Preset buttons
+    var presets = [10, 25, 50, 100, 150, total];
+    var container = document.getElementById('presetButtons');
+    container.innerHTML = '';
+    presets.forEach(function(n) {
+        if (n > total && n !== total) return;
+        var btn = document.createElement('button');
+        btn.className = 'preset-btn' + (n === 50 ? ' active' : '');
+        btn.textContent = n === total ? 'All (' + total + ')' : n;
+        btn.onclick = function() {
+            document.getElementById('numQuestions').value = n;
+            container.querySelectorAll('.preset-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+        };
+        container.appendChild(btn);
+    });
+
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+// ===== LOAD DATA (DUAL STRATEGY) =====
+window.addEventListener('DOMContentLoaded', function() {
+    // Strategy 1: Try fetch (works on web servers)
+    fetch('CISSP_Exam_Simulator_Data.json')
+        .then(function(r) {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(function(data) {
+            initializeData(data);
+        })
+        .catch(function(err) {
+            // Strategy 2: Show file picker fallback (works on file://)
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('loadingTitle').textContent = '📂 Manual File Selection Required';
+            document.getElementById('loadingSubtext').textContent =
+                'Could not auto-load (common when opening from local files)';
+            document.getElementById('filePickerFallback').style.display = 'block';
+        });
+
+    // File picker handler
+    document.getElementById('jsonFileInput').addEventListener('change', function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+
+        // Show loading state
+        document.getElementById('loadingSpinner').style.display = 'block';
+        document.getElementById('loadingTitle').textContent = 'Loading ' + file.name + '...';
+        document.getElementById('loadingSubtext').textContent = 'Parsing question bank';
+        document.getElementById('filePickerFallback').style.display = 'none';
+
+        var reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                var data = JSON.parse(event.target.result);
+                initializeData(data);
+            } catch (parseErr) {
+                document.getElementById('loadingSpinner').style.display = 'none';
+                document.getElementById('loadingTitle').innerHTML =
+                    '<span style="color:#ff5252;">&#10060; Invalid JSON file</span>';
+                document.getElementById('loadingSubtext').textContent = parseErr.message;
+                document.getElementById('filePickerFallback').style.display = 'block';
+            }
+        };
+        reader.onerror = function() {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('loadingTitle').innerHTML =
+                '<span style="color:#ff5252;">&#10060; Error reading file</span>';
+            document.getElementById('filePickerFallback').style.display = 'block';
+        };
+        reader.readAsText(file);
+    });
+});
+
+// ===== EXAM FUNCTIONS =====
+function shuffleArray(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var temp = a[i]; a[i] = a[j]; a[j] = temp;
+    }
+    return a;
+}
+
+function startExam() {
+    var num = Math.min(parseInt(document.getElementById('numQuestions').value) || 50, BANK.length);
+    var doShuffle = document.getElementById('shuffleToggle').classList.contains('active');
+    shuffleChoices = document.getElementById('shuffleChoicesToggle').classList.contains('active');
+    studyMode = document.getElementById('studyModeToggle').classList.contains('active');
+
+    questions = doShuffle ? shuffleArray(BANK).slice(0, num) : BANK.slice(0, num);
+    currentQuestion = 0;
+    userAnswers = {};
+    flaggedQuestions = new Set();
+    choiceMaps = {};
+    elapsedSeconds = 0;
+
+    // Precompute shuffled choice maps
+    questions.forEach(function(q, idx) {
+        var originalLetters = Object.keys(q.choices);
+        var displayLetters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').slice(0, originalLetters.length);
+        if (shuffleChoices) {
+            var shuffled = shuffleArray(originalLetters);
+            choiceMaps[idx] = { displayLetters: displayLetters, originalLetters: shuffled };
+        } else {
+            choiceMaps[idx] = { displayLetters: displayLetters, originalLetters: originalLetters.slice() };
+        }
+    });
+
+    document.getElementById('landingPage').style.display = 'none';
+    document.getElementById('examPage').style.display = 'block';
+
+    buildNavigator();
+    renderQuestion();
+    startTimer();
+}
+
+function startTimer() {
+    clearInterval(timerInterval);
+    timerInterval = setInterval(function() {
+        elapsedSeconds++;
+        var m = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
+        var s = String(elapsedSeconds % 60).padStart(2, '0');
+        var el = document.getElementById('timer');
+        el.textContent = '\u23F1\uFE0F ' + m + ':' + s;
+        var limit = questions.length * 90;
+        if (elapsedSeconds > limit * 0.8) el.classList.add('warning');
+        else el.classList.remove('warning');
+    }, 1000);
+}
+
+function buildNavigator() {
+    var nav = document.getElementById('questionNav');
+    nav.innerHTML = '';
+    questions.forEach(function(_, i) {
+        var btn = document.createElement('button');
+        btn.className = 'q-nav-btn';
+        btn.textContent = i + 1;
+        btn.onclick = function() { currentQuestion = i; renderQuestion(); };
+        nav.appendChild(btn);
+    });
+}
+
+function updateNavigator() {
+    var btns = document.querySelectorAll('.q-nav-btn');
+    btns.forEach(function(btn, i) {
+        btn.className = 'q-nav-btn';
+        if (i === currentQuestion) btn.classList.add('current');
+        if (userAnswers[i] !== undefined) btn.classList.add('answered');
+        if (flaggedQuestions.has(i)) btn.classList.add('flagged');
+    });
+}
+
+function renderQuestion() {
+    var q = questions[currentQuestion];
+    var map = choiceMaps[currentQuestion];
+
+    document.getElementById('questionCounter').textContent =
+        'Question ' + (currentQuestion + 1) + ' of ' + questions.length;
+    document.getElementById('questionIdLabel').textContent = ' (ID: ' + q.id + ')';
+    document.getElementById('questionText').textContent = q.question;
+
+    var progress = ((currentQuestion + 1) / questions.length) * 100;
+    document.getElementById('progressFill').style.width = progress + '%';
+
+    // Flag button
+    var flagBtn = document.getElementById('flagBtn');
+    flagBtn.className = flaggedQuestions.has(currentQuestion) ? 'flag-btn flagged' : 'flag-btn';
+
+    // Render choices using shuffled order
+    var area = document.getElementById('choicesArea');
+    area.innerHTML = '';
+    map.displayLetters.forEach(function(dLetter, i) {
+        var origLetter = map.originalLetters[i];
+        var div = document.createElement('div');
+        div.className = 'choice';
+        if (userAnswers[currentQuestion] === dLetter) div.classList.add('selected');
+        div.onclick = function() { selectChoice(dLetter); };
+        div.innerHTML =
+            '<div class="choice-letter">' + dLetter + '</div>' +
+            '<div>' + q.choices[origLetter] + '</div>';
+        area.appendChild(div);
+    });
+
+    // Reset explanation
+    document.getElementById('explanationArea').className = 'explanation';
+    document.getElementById('submitBtn').disabled = userAnswers[currentQuestion] === undefined;
+
+    // Re-show feedback if already submitted in study mode
+    if (studyMode && userAnswers[currentQuestion] !== undefined) {
+        showFeedback();
+    }
+
+    updateNavigator();
+}
+
+function selectChoice(letter) {
+    if (studyMode && userAnswers[currentQuestion] !== undefined) return;
+    userAnswers[currentQuestion] = letter;
+    renderQuestion();
+    document.getElementById('submitBtn').disabled = false;
+    if (studyMode) submitAnswer();
+}
+
+function getOriginalFromDisplay(qIndex, displayLetter) {
+    var map = choiceMaps[qIndex];
+    var idx = map.displayLetters.indexOf(displayLetter);
+    return idx >= 0 ? map.originalLetters[idx] : null;
+}
+
+function getDisplayFromOriginal(qIndex, origLetter) {
+    var map = choiceMaps[qIndex];
+    var idx = map.originalLetters.indexOf(origLetter);
+    return idx >= 0 ? map.displayLetters[idx] : null;
+}
+
+function submitAnswer() {
+    if (userAnswers[currentQuestion] === undefined) return;
+    showFeedback();
+}
+
+function showFeedback() {
+    var q = questions[currentQuestion];
+    var userDisplay = userAnswers[currentQuestion];
+    var userOrig = getOriginalFromDisplay(currentQuestion, userDisplay);
+    var correctOrig = q.correct_answer;
+    var correctDisplay = getDisplayFromOriginal(currentQuestion, correctOrig);
+
+    var choices = document.querySelectorAll('#choicesArea .choice');
+    var map = choiceMaps[currentQuestion];
+    choices.forEach(function(div, i) {
+        var dLetter = map.displayLetters[i];
+        div.onclick = null;
+        if (dLetter === correctDisplay) div.classList.add('correct');
+        else if (dLetter === userDisplay && userOrig !== correctOrig) div.classList.add('incorrect');
+    });
+
+    document.getElementById('explanationText').textContent = q.explanation;
+    document.getElementById('explanationArea').className = 'explanation show';
+    document.getElementById('submitBtn').disabled = true;
+}
+
+function toggleFlag() {
+    if (flaggedQuestions.has(currentQuestion)) flaggedQuestions.delete(currentQuestion);
+    else flaggedQuestions.add(currentQuestion);
+    renderQuestion();
+}
+
+function prevQuestion() {
+    if (currentQuestion > 0) { currentQuestion--; renderQuestion(); }
+}
+
+function nextQuestion() {
+    if (currentQuestion < questions.length - 1) { currentQuestion++; renderQuestion(); }
+}
+
+function finishExam() {
+    var unanswered = questions.length - Object.keys(userAnswers).length;
+    if (unanswered > 0) {
+        if (!confirm('You have ' + unanswered + ' unanswered question(s). Finish anyway?')) return;
+    }
+    clearInterval(timerInterval);
+    showResults();
+}
+
+function showResults() {
+    var correct = 0, incorrect = 0, unanswered = 0;
+    questions.forEach(function(q, i) {
+        if (userAnswers[i] === undefined) { unanswered++; return; }
+        var userOrig = getOriginalFromDisplay(i, userAnswers[i]);
+        if (userOrig === q.correct_answer) correct++;
+        else incorrect++;
+    });
+
+    var total = questions.length;
+    var pct = Math.round((correct / total) * 100);
+    var pass = pct >= 70;
+
+    document.getElementById('examPage').style.display = 'none';
+    document.getElementById('resultsPage').style.display = 'block';
+
+    var circle = document.getElementById('scoreCircle');
+    circle.className = 'score-circle ' + (pass ? 'pass' : 'fail');
+    document.getElementById('scoreValue').textContent = correct + '/' + total;
+    document.getElementById('scorePercent').textContent = pct + '%';
+    document.getElementById('resultMessage').textContent = pass ? '\uD83C\uDF89 Congratulations! You Passed!' : '\uD83D\uDCDA Keep Studying!';
+    document.getElementById('resultMessage').style.color = pass ? 'var(--correct)' : 'var(--incorrect)';
+
+    document.getElementById('statCorrect').textContent = correct;
+    document.getElementById('statIncorrect').textContent = incorrect;
+    document.getElementById('statUnanswered').textContent = unanswered;
+    var m = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
+    var s = String(elapsedSeconds % 60).padStart(2, '0');
+    document.getElementById('statTime').textContent = m + ':' + s;
+}
+
+function showReview() {
+    document.getElementById('resultsPage').style.display = 'none';
+    document.getElementById('reviewPage').style.display = 'block';
+    renderReview('all');
+}
+
+function filterReview(mode) { renderReview(mode); }
+
+function renderReview(filter) {
+    var area = document.getElementById('reviewArea');
+    area.innerHTML = '';
+    questions.forEach(function(q, i) {
+        var userDisplay = userAnswers[i];
+        var userOrig = userDisplay !== undefined ? getOriginalFromDisplay(i, userDisplay) : null;
+        var correctOrig = q.correct_answer;
+        var isCorrect = userOrig === correctOrig;
+
+        if (filter === 'incorrect' && (isCorrect || userDisplay === undefined)) return;
+
+        var div = document.createElement('div');
+        div.className = 'review-item ' + (userDisplay === undefined ? '' : (isCorrect ? 'correct-review' : 'incorrect-review'));
+
+        var correctDisplay = getDisplayFromOriginal(i, correctOrig);
+        var map = choiceMaps[i];
+
+        var choicesHtml = '<div style="margin:8px 0;">';
+        map.displayLetters.forEach(function(dLetter, ci) {
+            var oLetter = map.originalLetters[ci];
+            var style = '';
+            var prefix = '';
+            if (oLetter === correctOrig) { style = 'color:var(--correct);font-weight:bold;'; prefix = '\u2705 '; }
+            else if (dLetter === userDisplay && !isCorrect) { style = 'color:var(--incorrect);'; prefix = '\u274C '; }
+            choicesHtml += '<div style="' + style + 'margin:2px 0;">' + prefix + dLetter + '. ' + q.choices[oLetter] + '</div>';
+        });
+        choicesHtml += '</div>';
+
+        div.innerHTML =
+            '<div class="review-question">Q' + (i + 1) + ' (ID: ' + q.id + '): ' + q.question + '</div>' +
+            choicesHtml +
+            '<div class="review-answer">' +
+                (userDisplay
+                    ? 'Your answer: <strong>' + userDisplay + '</strong> &mdash; ' + (isCorrect ? '\u2705 Correct' : '\u274C Incorrect (Correct: ' + correctDisplay + ')')
+                    : '\u26A0\uFE0F Not answered (Correct: ' + correctDisplay + ')') +
+            '</div>' +
+            '<div style="margin-top:8px;font-size:0.85em;color:var(--text-light);">' + q.explanation + '</div>';
+        area.appendChild(div);
+    });
+    if (area.innerHTML === '') area.innerHTML = '<p style="text-align:center;color:var(--text-light);">No items to display.</p>';
+}
+
+function restartExam() {
+    clearInterval(timerInterval);
+    document.getElementById('examPage').style.display = 'none';
+    document.getElementById('resultsPage').style.display = 'none';
+    document.getElementById('reviewPage').style.display = 'none';
+    document.getElementById('landingPage').style.display = 'block';
+}
+</script>
+
+</body>
+</html>
